@@ -373,6 +373,8 @@ struct NewItem {
     rename: Rename,
     max_stack_size: Option<u8>,
     rarity: Option<Rarity>,
+    /// Its burn time (0: none), where it says.
+    fuel: Option<u32>,
 }
 
 struct Plan<'a> {
@@ -513,6 +515,7 @@ impl<'a> Plan<'a> {
                     rename: Rename::new(item, &b.decl.id),
                     max_stack_size: None,
                     rarity: None,
+                    fuel: b.decl.fuel,
                 });
             }
         }
@@ -522,6 +525,7 @@ impl<'a> Plan<'a> {
                     rename: Rename::new(&i.template, &i.id),
                     max_stack_size: i.max_stack_size,
                     rarity: i.rarity,
+                    fuel: i.fuel,
                 });
             }
         }
@@ -641,6 +645,19 @@ impl<'a> Plan<'a> {
                         Rarity::Epic => "epic",
                     };
                     v.set("minecraft:rarity", J::Str(r.into()));
+                }
+                // Its own burn time, else its template's.
+                match i.fuel {
+                    Some(0) => {
+                        if let J::Obj(o) = &mut v {
+                            o.retain(|(k, _)| k != "minecraft:cooking_fuel");
+                        }
+                    }
+                    Some(n) => v.set(
+                        "minecraft:cooking_fuel",
+                        J::Obj(vec![("burn_time".into(), J::Num(n.into()))]),
+                    ),
+                    None => {}
                 }
             }
             map.set(&i.rename.to, v);
@@ -1832,6 +1849,16 @@ pub fn build(base: &Path, mods: &[ContentMod], out: &Path) -> Result<Vec<String>
     if !machines.is_empty() {
         overlay.write(MACHINES, &serde_json::to_vec(&machines)?)?;
     }
+    // The models the game draws for blocks besides their own (a blaze burner's blaze).
+    let models: BTreeMap<&str, &Vec<String>> = mods
+        .iter()
+        .flat_map(|m| &m.content.blocks)
+        .filter(|b| !b.models.is_empty())
+        .map(|b| (b.id.as_str(), &b.models))
+        .collect();
+    if !models.is_empty() {
+        overlay.write(BLOCK_MODELS, &serde_json::to_vec(&models)?)?;
+    }
     let mut namespaces: Vec<&str> = mods
         .iter()
         .flat_map(|m| m.content.namespaces.iter().map(String::as_str))
@@ -1931,6 +1958,9 @@ pub const MACHINES: &str = "machines.json";
 /// In a root built by [`build`] with blocks of states of their own: the properties their
 /// templates do not place, by block id (kinetics.rs).
 pub const OWN_STATES: &str = "own-states.json";
+/// In a root built by [`build`] with blocks declaring `models`: those, by block id (kinetics.rs,
+/// and the model catalog bakes them).
+pub const BLOCK_MODELS: &str = "block-models.json";
 
 /// In a root built by [`resource_root`]: what it was built from.
 const STAMP: &str = "horizon-mod-content.stamp";

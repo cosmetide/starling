@@ -404,7 +404,7 @@ impl Spin {
         });
         let (axis, ends) = match k.part {
             KineticPart::Motor => (axis_of(facing?), vec![facing?]),
-            KineticPart::Crank | KineticPart::Drill | KineticPart::Fan => {
+            KineticPart::Crank | KineticPart::Drill | KineticPart::Fan | KineticPart::Bearing => {
                 let back = facing?.map(|v| -v);
                 (axis_of(back), vec![back])
             }
@@ -417,7 +417,21 @@ impl Spin {
                 (axis, ends)
             }
             KineticPart::Millstone => (1, vec![unit(1, -1)]),
+            KineticPart::Arm => {
+                let up = props.get("ceiling").map(String::as_str) == Some("true");
+                (1, vec![unit(1, if up { 1 } else { -1 })])
+            }
             KineticPart::Mixer => (1, Vec::new()),
+            // SawBlock: sideways, through its back; up or down, across it.
+            KineticPart::Saw if facing?[1] == 0 => {
+                let back = facing?.map(|v| -v);
+                (axis_of(back), vec![back])
+            }
+            KineticPart::Saw => {
+                let first = props.get("axis_along_first").map(String::as_str) == Some("true");
+                let axis = if first { 0 } else { 2 };
+                (axis, vec![unit(axis, 1), unit(axis, -1)])
+            }
             _ => {
                 let axis = by_name.or_else(|| facing.map(axis_of))?;
                 (axis, vec![unit(axis, 1), unit(axis, -1)])
@@ -813,6 +827,8 @@ mod tests {
             head: None,
             pole: None,
             models: Vec::new(),
+            stress: 0.0,
+            capacity: 8.0,
         };
         let props = BTreeMap::from([("facing".to_owned(), "up".to_owned())]);
         let spin = Spin::new(&crank, &props).unwrap();

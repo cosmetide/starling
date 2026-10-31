@@ -84,7 +84,7 @@ pub(super) fn insert_stacked(
 }
 
 impl Game<'_> {
-    fn machine_sound(&mut self, pos: [i32; 3], sound: &str, volume: f32, pitch: f32) {
+    pub(super) fn machine_sound(&mut self, pos: [i32; 3], sound: &str, volume: f32, pitch: f32) {
         self.level_events.push(LevelEvent::Sound {
             pos: horizon_core::position::BlockPos::new(pos[0], pos[1], pos[2]),
             sound: sound.into(),
@@ -110,14 +110,20 @@ impl Game<'_> {
                 Kind::Basin => self.tick_basin(pos),
                 Kind::Mixer => self.tick_mixer(pos, speed),
                 Kind::Burner => self.tick_burner(pos),
+                Kind::Saw => self.tick_saw(pos, speed),
+                Kind::Funnel => self.tick_funnel(pos),
+                Kind::Chute => self.tick_chute(pos),
+                Kind::Bearing => self.tick_bearing(pos, speed),
+                Kind::Arm => self.tick_arm(pos, speed),
                 Kind::Belt => {}
             }
         }
     }
 
-    /// `SharedDepotBlockMethods.onLanded`, `MillstoneBlock.updateEntityAfterFallOn`: an item
-    /// lying on the machine's top goes in, as much as fits.
-    fn catch_on_top(&mut self, pos: [i32; 3], kind: Kind, top: f64) {
+    /// `SharedDepotBlockMethods.onLanded`, `MillstoneBlock.updateEntityAfterFallOn`,
+    /// `SawBlock.updateEntityAfterFallOn`: an item lying on the machine's top goes in, as much
+    /// as fits.
+    pub(super) fn catch_on_top(&mut self, pos: [i32; 3], kind: Kind, top: f64) {
         let lo = [f64::from(pos[0]), f64::from(pos[2])];
         let y = f64::from(pos[1]) + top;
         let found = self.dropped.iter().position(|d| {
@@ -135,6 +141,8 @@ impl Game<'_> {
         let rest = match kind {
             Kind::Depot => self.depot_insert(pos, stack.clone()),
             Kind::Millstone => self.millstone_insert(pos, stack.clone()),
+            Kind::Saw => self.saw_insert(pos, stack.clone()),
+            Kind::Chute => self.chute_insert(pos, stack.clone()),
             _ => Some(stack.clone()),
         };
         match rest {
@@ -154,12 +162,13 @@ impl Game<'_> {
     // ---- depot ---------------------------------------------------------
 
     /// `DepotBehaviour.insert` (no merging: a depot holds one stack, whatever is left over
-    /// comes back). What did not go in.
+    /// comes back), refused while it holds one or its outputs wait to be taken (`isOccupied`:
+    /// a belt queues behind it). What did not go in.
     pub(super) fn depot_insert(&mut self, pos: [i32; 3], stack: ItemStack) -> Option<ItemStack> {
         let Some((_, mut e)) = self.machine_entity(pos) else {
             return Some(stack);
         };
-        if e.items[DEPOT_HELD].is_some() {
+        if e.items[DEPOT_HELD].is_some() || e.items[DEPOT_OUTPUTS].iter().any(Option::is_some) {
             return Some(stack);
         }
         let max = self.max_stack(&stack);
@@ -485,7 +494,13 @@ impl Game<'_> {
             f64::from(depot[1]) + 1.0,
             f64::from(depot[2]) + 0.5,
         ];
+        // DepotBehaviour.applyToAllItems: the first result held where the pressed one was, if
+        // it was the last, the rest into the outputs.
         for stack in recipe.roll(&mut self.world.random) {
+            if e.items[DEPOT_HELD].is_none() {
+                e.items[DEPOT_HELD] = Some(stack);
+                continue;
+            }
             if let Some(rest) = insert_stacked(&mut e.items[DEPOT_OUTPUTS], stack, 64) {
                 self.spawn_item(rest, at, [0.0; 3], 10);
             }
@@ -505,6 +520,8 @@ impl Game<'_> {
             Kind::Depot => Some(self.depot_insert(at, stack)),
             Kind::Millstone => Some(self.millstone_insert(at, stack)),
             Kind::Basin => Some(self.basin_insert(at, stack)),
+            Kind::Saw => Some(self.saw_insert(at, stack)),
+            Kind::Chute => Some(self.chute_insert(at, stack)),
             _ => None,
         }
     }
@@ -529,6 +546,8 @@ impl Game<'_> {
             }
             Kind::Millstone => MILL_OUTPUTS.collect(),
             Kind::Basin => super::basins::OUTPUTS.collect(),
+            // ProcessingInventory.extractItem: nothing comes out of a saw.
+            Kind::Saw => Vec::new(),
             _ => return None,
         };
         for slot in slots {
@@ -563,6 +582,9 @@ impl Game<'_> {
             // An empty hand or a bucket (BasinBlock.useItemOn).
             Some(Kind::Basin) => held.is_none_or(|s| s.item.ends_with("bucket")),
             Some(Kind::Belt) => held.is_none(),
+            Some(Kind::Saw) => self.saw_takes(pos, held),
+            Some(Kind::Funnel) => self.funnel_takes(pos, face, held),
+            Some(Kind::Bearing) => held.is_none(),
             // Fuel (BlazeBurnerBlock.useItemOn).
             Some(Kind::Burner) => held.is_some_and(|h| {
                 self.res
@@ -586,6 +608,9 @@ impl Game<'_> {
             Some(Kind::Basin) => self.use_basin(pos),
             Some(Kind::Belt) => self.use_belt(pos),
             Some(Kind::Burner) => self.use_burner(pos),
+            Some(Kind::Saw) => self.use_saw(pos),
+            Some(Kind::Funnel) => self.use_funnel(pos, face),
+            Some(Kind::Bearing) => self.use_bearing(pos),
             _ => false,
         }
     }

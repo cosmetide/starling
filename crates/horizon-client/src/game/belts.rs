@@ -256,6 +256,18 @@ pub(super) fn advance(
     movement: f32,
     ending: Ending,
 ) -> Vec<usize> {
+    advance_with(items, length, movement, ending, &mut |_, _| false)
+}
+
+/// [`advance`], `stop` asked of each item before it moves where it would (`BeltInventory.tick`'s
+/// funnel check): true holds it where `stop` leaves it.
+pub(super) fn advance_with(
+    items: &mut [Transported],
+    length: usize,
+    movement: f32,
+    ending: Ending,
+    stop: &mut dyn FnMut(&mut Transported, f32) -> bool,
+) -> Vec<usize> {
     // The first entry furthest along the way they go.
     if movement > 0.0 {
         items.sort_by(|a, b| b.position.total_cmp(&a.position));
@@ -302,6 +314,10 @@ pub(super) fn advance(
         } else {
             step.max(to_end)
         };
+        if !blocked && stop(item, current + limited) {
+            ahead = Some(item.position);
+            continue;
+        }
         if !blocked {
             item.position += limited;
             // Back to the middle as it goes.
@@ -408,9 +424,23 @@ impl Game<'_> {
             let movement = chain.movement(speed);
             if movement != 0.0 && !items.is_empty() {
                 let ending = self.belt_ending(&chain, movement);
-                let reached = advance(&mut items, chain.len(), movement, ending);
+                let count =
+                    |items: &[Transported]| items.iter().map(|i| i.stack.count).sum::<u32>();
+                let before = count(&items);
+                // Belt funnels above take what they can as items pass (funnels.rs).
+                let reached = advance_with(
+                    &mut items,
+                    chain.len(),
+                    movement,
+                    ending,
+                    &mut |item, next| self.belt_funnel_check(&chain, item, next, movement),
+                );
+                changed |= count(&items) != before;
                 let mut gone = Vec::new();
                 for i in reached {
+                    if items[i].stack.count == 0 {
+                        continue;
+                    }
                     let facing = chain.movement_facing(movement);
                     let past = chain.position_for(if movement > 0.0 {
                         chain.len() as i32
@@ -441,6 +471,8 @@ impl Game<'_> {
                     items.remove(i);
                     changed = true;
                 }
+                // What a funnel took all of.
+                items.retain(|i| i.stack.count > 0);
             }
             if changed {
                 self.write_belt(start, &items);
@@ -457,7 +489,7 @@ impl Game<'_> {
     }
 
     /// Keeps a belt's items as its start's block entity (and tells the players near).
-    fn write_belt(&mut self, start: [i32; 3], items: &[Transported]) {
+    pub(super) fn write_belt(&mut self, start: [i32; 3], items: &[Transported]) {
         let (Some(Kind::Belt), Some(mut e)) = (
             self.machine_kind(start),
             self.machine_entity(start).map(|(_, e)| e),
@@ -477,11 +509,7 @@ impl Game<'_> {
         } else {
             -1
         });
-        let takes = matches!(
-            self.machine_kind(past),
-            Some(Kind::Depot | Kind::Millstone | Kind::Basin | Kind::Belt)
-        ) || self.crusher_at(past);
-        if takes {
+        if self.takes_from_belt(past) {
             return Ending::Insert;
         }
         let facts = self
@@ -495,9 +523,26 @@ impl Game<'_> {
         }
     }
 
+    /// Whether what is at `at` takes items from a belt (`DirectBeltInputBehaviour`): a depot, a
+    /// millstone, a basin, a belt, a saw facing up, crushing wheels.
+    pub(super) fn takes_from_belt(&self, at: [i32; 3]) -> bool {
+        match self.machine_kind(at) {
+            Some(Kind::Depot | Kind::Millstone | Kind::Basin | Kind::Belt) => true,
+            Some(Kind::Saw) => {
+                let state = self.world.block(at[0], at[1], at[2]);
+                self.pack
+                    .assets
+                    .registry
+                    .state(state)
+                    .is_some_and(|s| s.properties.get("facing").map(String::as_str) == Some("up"))
+            }
+            _ => self.crusher_at(at),
+        }
+    }
+
     /// `DirectBeltInputBehaviour.handleInsertion` of what is at `at`, from a belt going `facing`:
     /// what did not go in.
-    fn belt_insert_into(
+    pub(super) fn belt_insert_into(
         &mut self,
         at: [i32; 3],
         facing: [i32; 3],
@@ -520,7 +565,7 @@ impl Game<'_> {
 
     /// An item onto the belt segment at `at` from a belt behind it going `facing` (the next
     /// belt's start or side): `BeltInventory.canInsertAtFromSide` and `insert`.
-    fn belt_insert_from_side(
+    pub(super) fn belt_insert_from_side(
         &mut self,
         at: [i32; 3],
         facing: [i32; 3],

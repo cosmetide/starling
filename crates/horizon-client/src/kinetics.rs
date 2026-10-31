@@ -51,6 +51,9 @@ pub struct Part {
     pub pulley: bool,
     /// More models the game draws for it (a belt's, game/belts.rs).
     pub models: Vec<String>,
+    /// What it takes from its network and, a source, gives, per RPM ([`Kinetic::stress`]).
+    pub stress: f32,
+    pub capacity: f32,
 }
 
 impl Part {
@@ -65,7 +68,11 @@ impl Part {
             _ => None,
         };
         let (axis, face) = match kinetic.part {
-            KineticPart::Motor | KineticPart::Crank | KineticPart::Drill | KineticPart::Fan => {
+            KineticPart::Motor
+            | KineticPart::Crank
+            | KineticPart::Drill
+            | KineticPart::Fan
+            | KineticPart::Bearing => {
                 let facing = direction(facing?)?;
                 let face = if kinetic.part == KineticPart::Motor {
                     facing
@@ -74,8 +81,21 @@ impl Part {
                 };
                 (axis_of(face), face)
             }
+            // SawBlock: sideways, a drill's back; up or down, across it (set where it loads, by
+            // its `axis_along_first`).
+            KineticPart::Saw => {
+                let facing = direction(facing?)?;
+                if facing[1] == 0 {
+                    let face = facing.map(|v| -v);
+                    (axis_of(face), face)
+                } else {
+                    (2, [0; 3])
+                }
+            }
             // Cogwheels about y whatever their state says.
             KineticPart::Millstone | KineticPart::Mixer => (1, [0; 3]),
+            // ArmBlock: about y, its shaft below (above, on a ceiling: set where it loads).
+            KineticPart::Arm => (1, [0, -1, 0]),
             // A belt's pulley across it, level (a sideways belt's is set upright where it loads).
             KineticPart::Belt => (
                 if axis_of(direction(facing?)?) == 0 {
@@ -108,6 +128,8 @@ impl Part {
             powered: false,
             pulley: true,
             models: kinetic.models.clone(),
+            stress: kinetic.stress.max(0.0),
+            capacity: kinetic.capacity.max(0.0),
         })
     }
     /// A cogwheel's teeth (Create's models: 8 and 16, one along each axis at no turn).
@@ -120,7 +142,10 @@ impl Part {
     /// A cogwheel's radius in blocks; 0 for parts that do not mesh.
     pub fn radius(&self) -> f32 {
         match self.kind {
-            KineticPart::Cogwheel | KineticPart::Millstone | KineticPart::Mixer => 0.5,
+            KineticPart::Cogwheel
+            | KineticPart::Millstone
+            | KineticPart::Mixer
+            | KineticPart::Arm => 0.5,
             KineticPart::LargeCogwheel => 1.0,
             _ => 0.0,
         }
@@ -157,13 +182,20 @@ impl Part {
             // MillstoneBlock.hasShaftTowards: down only; the mixer's none (both mesh).
             KineticPart::Millstone => vec![([0, -1, 0], 1.0)],
             KineticPart::Mixer => Vec::new(),
+            KineticPart::Arm => vec![(self.face, 1.0)],
             KineticPart::Gearbox => (0..3)
                 .filter(|a| *a != self.axis)
                 .flat_map(|a| [(unit(a, 1), 1.0), (unit(a, -1), -1.0)])
                 .collect(),
-            KineticPart::Motor | KineticPart::Crank | KineticPart::Drill | KineticPart::Fan => {
+            KineticPart::Motor
+            | KineticPart::Crank
+            | KineticPart::Drill
+            | KineticPart::Fan
+            | KineticPart::Bearing => vec![(self.face, self.face[self.axis] as f32)],
+            KineticPart::Saw if self.face != [0; 3] => {
                 vec![(self.face, self.face[self.axis] as f32)]
             }
+            KineticPart::Saw => vec![(unit(self.axis, 1), 1.0), (unit(self.axis, -1), 1.0)],
         }
     }
     /// Whether it is a source: a motor always, a crank while turned.
@@ -186,6 +218,8 @@ pub struct KineticTable {
     machines: Vec<Option<Machine>>,
     /// The properties of blocks' own their templates do not place, by block (own-states.json).
     own: HashMap<String, Vec<String>>,
+    /// The models the game draws for blocks besides their own, by block (block-models.json).
+    models: HashMap<String, Vec<String>>,
 }
 
 impl KineticTable {
@@ -212,6 +246,17 @@ impl KineticTable {
                             part.axis = 1;
                         }
                     }
+                    if part.kind == KineticPart::Arm && prop("ceiling") == Some("true") {
+                        part.face = [0, 1, 0];
+                    }
+                    // DirectionalAxisKineticBlock.getRotationAxis, facing up or down.
+                    if part.kind == KineticPart::Saw && part.face == [0; 3] {
+                        part.axis = if prop("axis_along_first") == Some("true") {
+                            0
+                        } else {
+                            2
+                        };
+                    }
                     Arc::new(part)
                 });
             }
@@ -219,6 +264,10 @@ impl KineticTable {
         if let Some(bytes) = read(crate::mod_content::OWN_STATES) {
             out.own = serde_json::from_slice(&bytes)
                 .map_err(|e| format!("{}: {e}", crate::mod_content::OWN_STATES))?;
+        }
+        if let Some(bytes) = read(crate::mod_content::BLOCK_MODELS) {
+            out.models = serde_json::from_slice(&bytes)
+                .map_err(|e| format!("{}: {e}", crate::mod_content::BLOCK_MODELS))?;
         }
         if let Some(bytes) = read(crate::mod_content::MACHINES) {
             let declared: HashMap<String, Machine> = serde_json::from_slice(&bytes)
@@ -240,6 +289,10 @@ impl KineticTable {
     pub fn own_placement(&self, block: &str) -> Option<&[String]> {
         self.own.get(block).map(Vec::as_slice)
     }
+    /// The models the game draws for `block` besides its own, in its declared order.
+    pub fn block_models(&self, block: &str) -> &[String] {
+        self.models.get(block).map_or(&[], Vec::as_slice)
+    }
     pub fn get(&self, state: BlockStateId) -> Option<&Arc<Part>> {
         self.parts.get(state.0 as usize)?.as_ref()
     }
@@ -248,13 +301,18 @@ impl KineticTable {
         *self.machines.get(state.0 as usize)?
     }
     /// Whether a state keeps a block entity of its machine's (its items, its work): a declared
-    /// machine, or a millstone, a press or a mixer.
+    /// machine, or a millstone, a press, a mixer or a saw.
     pub fn keeps_entity(&self, state: BlockStateId) -> bool {
         self.machine(state).is_some()
             || self.get(state).is_some_and(|p| {
                 matches!(
                     p.kind,
-                    KineticPart::Millstone | KineticPart::Press | KineticPart::Mixer
+                    KineticPart::Millstone
+                        | KineticPart::Press
+                        | KineticPart::Mixer
+                        | KineticPart::Saw
+                        | KineticPart::Bearing
+                        | KineticPart::Arm
                 )
             })
     }
@@ -397,7 +455,9 @@ fn links(parts: &HashMap<[i32; 3], Arc<Part>>, p: [i32; 3], part: &Part) -> Vec<
 /// Every part's speed, from the sources: the motors, and `turned` (cranks being turned, at
 /// their own speed, outwards). Each network takes its fastest source's speed; a slower one
 /// turning it the same way is overpowered. A network its sources (or a loop of gears) would
-/// turn two ways at once stands still. Parts no source reaches are not listed.
+/// turn two ways at once stands still, and so does one taking more stress than its sources
+/// give (Create's KineticNetwork: each part's stress times its speed, against each source's
+/// capacity times its own). Parts no source reaches are not listed.
 pub fn solve(
     parts: &HashMap<[i32; 3], Arc<Part>>,
     turned: &HashMap<[i32; 3], f32>,
@@ -434,18 +494,24 @@ pub fn solve_linked(
     sources.sort_by(|a, b| b.1.abs().total_cmp(&a.1.abs()).then(a.0.cmp(&b.0)));
     let mut speed: HashMap<[i32; 3], (f32, usize)> = HashMap::new();
     let mut stuck: Vec<bool> = Vec::new();
+    // Each network's stress capacity: its sources' (calculateCapacity).
+    let mut capacity: Vec<f32> = Vec::new();
     // Parts held at the limit: their gears no longer match, which jams nothing.
     let mut capped: std::collections::HashSet<[i32; 3]> = std::collections::HashSet::new();
     for (start, value) in sources {
+        let gives = parts[&start].capacity * value.abs();
         if let Some((s, net)) = speed.get(&start) {
             // Reached from a faster source: the other way jams the network.
             if s * value < 0.0 {
                 stuck[*net] = true;
+            } else {
+                capacity[*net] += gives;
             }
             continue;
         }
         let net = stuck.len();
         stuck.push(false);
+        capacity.push(gives);
         speed.insert(start, (value.clamp(-MAX_RPM, MAX_RPM), net));
         let mut queue = VecDeque::from([start]);
         while let Some(p) = queue.pop_front() {
@@ -482,10 +548,54 @@ pub fn solve_linked(
             }
         }
     }
+    // calculateStress: what every part takes at its speed; more than the capacity overstresses.
+    let mut stress = vec![0.0f32; stuck.len()];
+    for (p, (s, net)) in &speed {
+        stress[*net] += parts[p].stress * s.abs();
+    }
+    for (net, jammed) in stuck.iter_mut().enumerate() {
+        *jammed |= stress[net] > capacity[net];
+    }
     speed
         .into_iter()
         .map(|(p, (s, net))| (p, if stuck[net] { 0.0 } else { s }))
         .collect()
+}
+
+/// The stress the network `start` is in takes and the capacity its sources give, in stress units
+/// (Create's KineticNetwork, as [`solve_linked`] weighs it), from the speeds it solved.
+pub fn network_stress(
+    parts: &HashMap<[i32; 3], Arc<Part>>,
+    turned: &HashMap<[i32; 3], f32>,
+    groups: &[Vec<[i32; 3]>],
+    speeds: &HashMap<[i32; 3], f32>,
+    start: [i32; 3],
+) -> Option<(f32, f32)> {
+    parts.get(&start)?;
+    let mut seen = std::collections::HashSet::from([start]);
+    let mut queue = VecDeque::from([start]);
+    let (mut stress, mut capacity) = (0.0f32, 0.0f32);
+    while let Some(p) = queue.pop_front() {
+        let part = &parts[&p];
+        let speed = speeds.get(&p).copied().unwrap_or(0.0);
+        stress += part.stress * speed.abs();
+        let own = if part.source() {
+            part.rpm
+        } else {
+            turned.get(&p).copied().unwrap_or(0.0)
+        };
+        capacity += part.capacity * own.abs();
+        let mut joined: Vec<[i32; 3]> = links(parts, p, part).into_iter().map(|(q, _)| q).collect();
+        if let Some(g) = groups.iter().find(|g| g.contains(&p)) {
+            joined.extend(g.iter().copied().filter(|q| parts.contains_key(q)));
+        }
+        for q in joined {
+            if seen.insert(q) {
+                queue.push_back(q);
+            }
+        }
+    }
+    Some((stress, capacity))
 }
 
 /// Every part's turn when the world's clock began, in degrees, so meshed cogwheels' teeth go into
@@ -562,6 +672,8 @@ mod tests {
             head: None,
             pole: None,
             models: Vec::new(),
+            stress: 0.0,
+            capacity: 0.0,
         };
         Arc::new(Part::new(&kinetic, axis, facing).unwrap())
     }
@@ -625,6 +737,8 @@ mod tests {
             head: None,
             pole: None,
             models: Vec::new(),
+            stress: 0.0,
+            capacity: 8.0,
         };
         let up = Part::new(&kinetic, None, Some("up")).unwrap();
         assert_eq!(up.extra_turns, Some([3, 0, 0]));
@@ -672,6 +786,35 @@ mod tests {
         parts.insert([-2, 0, 0], wheel);
         parts.insert([-3, 0, 0], shaft("x"));
         assert_eq!(solve(&parts, &HashMap::new())[&[-3, 0, 0]], -16.0);
+    }
+
+    #[test]
+    fn a_network_taking_more_stress_than_its_sources_give_stands_still() {
+        // A motor giving 2 per RPM at 16 (32) turns a drill taking 4 per RPM (64): too much.
+        let with = |p: Arc<Part>, stress: f32, capacity: f32| {
+            let mut p = (*p).clone();
+            p.stress = stress;
+            p.capacity = capacity;
+            Arc::new(p)
+        };
+        let mut parts = HashMap::new();
+        parts.insert([0, 0, 0], with(motor("east", 16.0), 0.0, 2.0));
+        parts.insert(
+            [1, 0, 0],
+            with(part(KineticPart::Drill, None, Some("east"), 0.0), 4.0, 0.0),
+        );
+        assert_eq!(solve(&parts, &HashMap::new())[&[1, 0, 0]].abs(), 0.0);
+        // Twice the capacity is enough (as much as it takes).
+        parts.insert([0, 0, 0], with(motor("east", 16.0), 0.0, 4.0));
+        assert_eq!(solve(&parts, &HashMap::new())[&[1, 0, 0]].abs(), 16.0);
+        // Two sources turning a line the same way give both their capacities.
+        let mut parts = HashMap::new();
+        parts.insert([0, 0, 0], with(motor("east", 16.0), 0.0, 2.0));
+        parts.insert([1, 0, 0], with(shaft("x"), 4.0, 0.0));
+        parts.insert([2, 0, 0], shaft("x"));
+        assert_eq!(solve(&parts, &HashMap::new())[&[1, 0, 0]], 0.0);
+        parts.insert([3, 0, 0], with(motor("west", -16.0), 0.0, 2.0));
+        assert_eq!(solve(&parts, &HashMap::new())[&[1, 0, 0]], 16.0);
     }
 
     #[test]

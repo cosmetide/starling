@@ -135,6 +135,14 @@ pub struct Kinetic {
     /// start, middle, end, their bottoms, its diagonals, its pulley).
     #[serde(default)]
     pub models: Vec<String>,
+    /// Create's stress: what it takes from its network, in stress units per RPM it turns at
+    /// (Create's `impact`: a drill's 4, a press's 8).
+    #[serde(default)]
+    pub stress: f32,
+    /// A source's stress capacity, in stress units per RPM it turns its network at (a water
+    /// wheel's 32, a crank's 8). A network taking more than its sources give stands still.
+    #[serde(default)]
+    pub capacity: f32,
 }
 
 /// The directions a kinetic model may be made pointing.
@@ -228,6 +236,19 @@ pub enum KineticPart {
     /// A mechanical belt's segment (Create's belt): its pulleys (at its ends) join the shafts at
     /// their sides and turn together, and it carries items along.
     Belt,
+    /// Create's mechanical saw: facing sideways, turned through its back, it cuts the block it
+    /// faces as a drill does (only wood, leaves and plants) and the whole tree above it; facing
+    /// up or down, an axle across it (its state's `axis_along_first`), and facing up it cuts the
+    /// items put on it (cutting and stonecutting recipes).
+    Saw,
+    /// Create's mechanical and windmill bearings: turned through its back (or, a windmill's,
+    /// turning it), it carries the blocks attached in front of it round its facing's axis; a
+    /// windmill's is a source by its sails (`capacity`), a mechanical one starts and stops
+    /// with its network.
+    Bearing,
+    /// Create's mechanical arm: a small cogwheel about y also joined from below (above, its
+    /// state's `ceiling`), moving items between the points marked for it as it turns.
+    Arm,
 }
 
 /// What a block with work of its own keeps and does (Starling: Create's machines,
@@ -246,6 +267,14 @@ pub enum Machine {
     /// Burns fuel and heats the basin above it, its state's `blaze` saying how much (Create's
     /// blaze burner).
     Burner,
+    /// Faces away from the inventory behind it: puts what comes in at its open side into it, or
+    /// (its state's `extracting`) takes items out and drops them; `powered` pauses it (Create's
+    /// funnels; a `brass` one takes up to a stack at a time).
+    Funnel,
+    /// Items fall through it, from the inventory above (or landing on it) to the one below, the
+    /// chute it leads into (its state's `facing`: down, or a diagonal one's way), or dropped
+    /// below (Create's chute).
+    Chute,
 }
 
 #[derive(Debug, Deserialize)]
@@ -262,6 +291,10 @@ struct BlockFile {
     machine: Option<Machine>,
     #[serde(default)]
     states: Option<std::collections::BTreeMap<String, Vec<String>>>,
+    #[serde(default)]
+    fuel: Option<u32>,
+    #[serde(default)]
+    models: Vec<String>,
 }
 fn yes() -> bool {
     true
@@ -287,6 +320,12 @@ pub struct Block {
     /// take the template's behaviour and facts, each from the template's state sharing most of
     /// its properties.
     pub states: Option<std::collections::BTreeMap<String, Vec<String>>>,
+    /// How long its item burns in a furnace, in ticks (0: not at all, whatever its template's
+    /// does).
+    pub fuel: Option<u32>,
+    /// Starling: models (`<ns>:block/<path>`) the game draws for it besides its own, in the
+    /// order its machine names them (a blaze burner's blaze, its rods and its flame).
+    pub models: Vec<String>,
 }
 
 /// The most states a block may declare of its own.
@@ -307,6 +346,7 @@ struct ItemFile {
     template: String,
     max_stack_size: Option<u8>,
     rarity: Option<Rarity>,
+    fuel: Option<u32>,
 }
 
 /// An item the mod adds: a vanilla template item's components under a new
@@ -318,6 +358,8 @@ pub struct Item {
     pub template: String,
     pub max_stack_size: Option<u8>,
     pub rarity: Option<Rarity>,
+    /// How long it burns in a furnace, in ticks (0: not at all, whatever its template does).
+    pub fuel: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -636,6 +678,8 @@ impl Content {
                 kinetic: file.kinetic,
                 machine: file.machine,
                 states: file.states,
+                fuel: file.fuel,
+                models: file.models,
             });
         }
         for (item, name) in items {
@@ -658,6 +702,7 @@ impl Content {
                 template: file.template,
                 max_stack_size: file.max_stack_size,
                 rarity: file.rarity,
+                fuel: file.fuel,
             });
         }
         Ok(())
@@ -855,6 +900,8 @@ capabilities = ["registries"]
                 kinetic: None,
                 machine: None,
                 states: None,
+                fuel: None,
+                models: Vec::new(),
             }]
         );
         assert_eq!(content.items[0].id, "ruby:ruby");

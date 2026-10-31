@@ -6,9 +6,11 @@ mod agent;
 mod agent_settings;
 mod allays;
 mod armor_stands;
+mod arms;
 mod banners;
 mod basins;
 mod beacon;
+mod bearings;
 mod beds;
 mod beehives;
 mod belts;
@@ -29,6 +31,7 @@ mod cartography;
 mod cat_spawner;
 mod chat;
 mod chiseled_bookshelf;
+mod chutes;
 mod client_ambient;
 mod clipboard;
 mod code_of_conduct;
@@ -63,6 +66,7 @@ mod execution_role;
 mod explosion;
 mod extras;
 mod falling_damage;
+mod falling_trees;
 mod fangs;
 mod fans;
 #[cfg(target_os = "android")]
@@ -73,6 +77,7 @@ mod fov;
 mod frames;
 mod friends;
 mod functions;
+mod funnels;
 mod game_mode;
 mod gamemode_switcher;
 mod ghasts;
@@ -187,6 +192,7 @@ mod render_tick;
 mod respawn_anchor;
 mod saves_control;
 mod saving;
+mod saws;
 mod scoreboard;
 mod screens;
 mod sculk;
@@ -4425,6 +4431,11 @@ impl Game<'_> {
             && let Some(hit) = block_hit
         {
             let held = self.held().cloned();
+            // Create's arm in hand marks what it works with (arms.rs).
+            if self.use_arm_item(hit.pos) {
+                self.swing_arm();
+                return Ok(true);
+            }
             // A content mod's machine (Create's depot, millstone: processing.rs).
             if self.use_machine(hit.pos, hit.face) {
                 self.swing_arm();
@@ -4715,6 +4726,8 @@ impl Game<'_> {
         let state = self.apply_item_block_state(target, state, &stack)?;
         // A content mod's block with states of its own: what its template does not place.
         let state = self.orient_own_states(target, state, &ctx);
+        // Create's arm takes the points marked for it.
+        self.arm_placed(target);
         self.mod_block_event(target, state, true);
         if let Some(entity) = BlockEntity::for_block(&self.res.facts().get(state).name) {
             let key = (target[0], target[1], target[2]);
@@ -6236,6 +6249,8 @@ impl Game<'_> {
         self.draw_link_prompt(&mut batch);
         self.draw_touch(&mut batch);
         self.draw_chat_bar(&mut batch);
+        // Starling: the kinetic part looked at, its speed and stress (kinetics.rs).
+        self.draw_kinetic_info(&mut batch);
         // Gui.extractRenderState: the debug overlay comes after the screen
         // and the toasts, so it is over everything, menus included.
         self.draw_debug_overlay(&mut batch, size);

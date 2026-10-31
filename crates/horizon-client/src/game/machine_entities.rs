@@ -27,6 +27,14 @@ pub(super) struct MachineEntity {
     pub(super) fluids: Vec<Option<(String, i32)>>,
     /// A belt's items, on its start (`Belt`; belts.rs).
     pub(super) belt: Vec<super::belts::Transported>,
+    /// Which of its recipes for the item it holds it took last (`RecipeIndex`): a saw's.
+    pub(super) recipe: i32,
+    /// The blocks it moves (`Contraption`): a bearing's (bearings.rs).
+    pub(super) contraption: Option<Tag>,
+    /// An arm's points and work (`Arm`; arms.rs).
+    pub(super) arm: Option<Tag>,
+    /// The tree a saw felled, falling (`Felling`; falling_trees.rs).
+    pub(super) felling: Option<Tag>,
 }
 
 /// What a machine is, from its block's state: a declared machine or a kinetic part with work.
@@ -39,6 +47,11 @@ pub(super) enum Kind {
     Millstone,
     Press,
     Mixer,
+    Saw,
+    Funnel,
+    Chute,
+    Bearing,
+    Arm,
 }
 
 impl Kind {
@@ -48,20 +61,33 @@ impl Kind {
             (Some(Machine::Basin), _) => Kind::Basin,
             (Some(Machine::Belt), _) => Kind::Belt,
             (Some(Machine::Burner), _) => Kind::Burner,
+            (Some(Machine::Funnel), _) => Kind::Funnel,
+            (Some(Machine::Chute), _) => Kind::Chute,
             (_, Some(KineticPart::Millstone)) => Kind::Millstone,
             (_, Some(KineticPart::Press)) => Kind::Press,
             (_, Some(KineticPart::Mixer)) => Kind::Mixer,
+            (_, Some(KineticPart::Saw)) => Kind::Saw,
+            (_, Some(KineticPart::Bearing)) => Kind::Bearing,
+            (_, Some(KineticPart::Arm)) => Kind::Arm,
             _ => return None,
         })
     }
     /// Its slots: a depot's held stack then its 8 outputs (DepotBehaviour's processing output
-    /// buffer), a basin's 9 inputs then 9 outputs, a millstone's input then its 9 outputs.
+    /// buffer), a basin's 9 inputs then 9 outputs, a millstone's input then its 9 outputs, a
+    /// saw's input then what it was cut into (ProcessingInventory).
     pub(super) fn slots(self) -> usize {
         match self {
             Kind::Depot => 9,
             Kind::Basin => 18,
             Kind::Millstone => 10,
-            Kind::Press | Kind::Mixer | Kind::Belt | Kind::Burner => 0,
+            Kind::Saw => super::saws::SLOTS,
+            Kind::Chute | Kind::Arm => 1,
+            Kind::Press
+            | Kind::Mixer
+            | Kind::Belt
+            | Kind::Burner
+            | Kind::Funnel
+            | Kind::Bearing => 0,
         }
     }
     /// Its tanks: a basin's two inputs then two outputs (its SmartFluidTankBehaviours).
@@ -108,6 +134,10 @@ impl MachineEntity {
             work: int(tag, "Work") as i32,
             fluids,
             belt: super::belts::read_items(tag),
+            recipe: int(tag, "RecipeIndex") as i32,
+            contraption: tag.get("Contraption").cloned(),
+            arm: tag.get("Arm").cloned(),
+            felling: tag.get("Felling").cloned(),
         }
     }
     fn tag(&self, id: &str, pos: [i32; 3]) -> Tag {
@@ -124,7 +154,7 @@ impl MachineEntity {
                 ]))
             })
             .collect();
-        Tag::compound([
+        let mut entries = vec![
             ("id", Tag::String(id.into())),
             ("x", Tag::Int(pos[0])),
             ("y", Tag::Int(pos[1])),
@@ -137,7 +167,18 @@ impl MachineEntity {
             ("Work", Tag::Int(self.work)),
             ("Fluids", Tag::List(fluids)),
             ("Belt", super::belts::items_tag(&self.belt)),
-        ])
+            ("RecipeIndex", Tag::Int(self.recipe)),
+        ];
+        if let Some(c) = &self.contraption {
+            entries.push(("Contraption", c.clone()));
+        }
+        if let Some(a) = &self.arm {
+            entries.push(("Arm", a.clone()));
+        }
+        if let Some(f) = &self.felling {
+            entries.push(("Felling", f.clone()));
+        }
+        Tag::compound(entries)
     }
     /// What it holds, slot by slot, the empty ones left out.
     pub(super) fn stacks(&self) -> impl Iterator<Item = &ItemStack> {
@@ -234,6 +275,10 @@ mod tests {
             work: 7,
             fluids: vec![None, Some(("minecraft:water".into(), 250))],
             belt: Vec::new(),
+            recipe: 3,
+            contraption: Some(Tag::compound([("Angle", Tag::Float(12.5f32.to_bits()))])),
+            arm: None,
+            felling: Some(Tag::compound([("Since", Tag::Long(42))])),
         };
         let tag = entity.tag("create:depot", [1, 64, -3]);
         assert!(is_machine_tag(&tag));

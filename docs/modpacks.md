@@ -268,16 +268,29 @@ of four by the player's facing (`own-states.json` in the root; game/own_states.r
 turn and mirror among themselves by their `facing` or `axis`.
 
 A block that keeps items of its own declares the **machine** it is, `"machine": "depot" |
-"basin"` (Starling, `machines.json` in the root): its block entity is a tag the chunk saves (its
-id its block's), sent to the players near with a Starling-only block entity type, and its items
-drop when it breaks (game/machine_entities.rs). Hoppers put into a depot, a millstone or a
-basin and take from their outputs.
+"basin" | "belt" | "burner" | "funnel" | "chute"` (Starling, `machines.json` in the root): its block entity
+is a tag the chunk saves (its id its block's), sent to the players near with a Starling-only
+block entity type, and its items drop when it breaks (game/machine_entities.rs). Hoppers put into
+a depot, a millstone, a basin or a saw and take from their outputs. A `funnel` (its states'
+`facing`, `extracting` and `powered`) faces away from the inventory behind it: it puts what comes
+in at its open side into it, or extracts and drops what it gives every 8 ticks (one item, a
+`brass` one's block up to a stack), while no redstone signal is beside it; a `*_belt_funnel` over
+a belt takes what passes off it, or pushes onto it (its `shape`: `pulling`, `pushing`,
+`retracted`, `extended`), and a sideways funnel placed over a belt or depot becomes one
+(game/funnels.rs). Items fall through a `chute` (its `facing` down, or a diagonal one's way) from
+the inventory above or landing on it to the one below, the chute it leads into, or dropped
+(game/chutes.rs). A block may also declare `models`, more models the game draws for it in the
+order its machine names them (a blaze burner's blaze, rods and flame: `block-models.json`).
 
 A block can also be a **kinetic part** (Starling: rotation passed from block to block, as
 Create's; `horizon_client::kinetics`): `"kinetic": { "part": "shaft" | "cogwheel" |
 "large_cogwheel" | "gearbox" | "motor" | "crank" | "drill" | "crushing_wheel" | "millstone" |
-"press" | "mixer" | "fan" | "water_wheel" | "clutch" | "gearshift", "rpm": 16, "spins": true, "half":
-"<ns>:block/<model>", "extra": "<ns>:block/<model>" }`. Its axis or facing is its state's `axis`
+"press" | "mixer" | "fan" | "water_wheel" | "clutch" | "gearshift" | "belt" | "saw" | "bearing" |
+"arm", "rpm": 16,
+"spins": true, "half": "<ns>:block/<model>", "extra": "<ns>:block/<model>", "stress": 4,
+"capacity": 32 }`. `stress` is what a part takes from its network per RPM it turns at, `capacity`
+what a source gives per RPM it turns the network at; a network taking more than its sources give
+stands still (Create's stress units). Its axis or facing is its state's `axis`
 or `facing` (a shaft-like part with only a `facing`, a water wheel, is an axle along it). A part that turns whole (`spins`) declares `"render_shape": "ENTITYBLOCK_ANIMATED"`
 in its properties, so the terrain leaves it to the game, which draws it turning; `half` is a
 model drawn turning at each face it joins through (a gearbox's shaft ends), `extra` one turning
@@ -296,9 +309,22 @@ two blocks below (`create:mixing`, shapeless crafting, fluids, heat); a `fan` bl
 items along its current and water, lava, fire and soul fire in it wash, blast, smoke and haunt
 them (game/processing.rs, basins.rs, fans.rs). A `water_wheel` is a source the water flowing past
 it turns, 8 RPM; a `clutch` breaks and a `gearshift` reverses its axle while powered. `head` and
-`pole` name the models a press or a mixer moves down as it works. The build gathers the parts in the root's `kinetic.json`. Templates also give mod blocks every behaviour Horizon already
-implements and the harnesses already check. Items work the same way (`"template":
-"minecraft:diamond"`, overriding `max_stack_size`, `rarity` and so on).
+`pole` name the models a press or a mixer moves down as it works. A `saw` facing sideways cuts the
+wood, leaves and plants it faces as a drill does and fells the tree above, which tips over away
+from it and breaks where it lands (Starling: Create breaks it standing); facing up it is an
+axle across it (its `axis_along_first`) cutting the items put on it (`create:cutting`, the
+stonecutter's recipes, and the wood recipes Create makes as the game loads), its `models` the
+blade's: sideways running, reversed and still, then upright (game/saws.rs). A `bearing` (a
+drill's axle behind it, its `models` its top) carries the blocks attached in front of it round
+its facing's axis, a windmill one (its id says so) being a source by its sails; an `arm` (a
+small cogwheel about y, joined below or, `ceiling`, above; its `models` its parts) moves items
+between the points marked with it in hand before it is placed (game/bearings.rs, arms.rs).
+The build gathers
+the parts in the root's `kinetic.json`. Templates also give mod blocks every behaviour Horizon
+already implements and the harnesses already check. Items work the same way (`"template":
+"minecraft:diamond"`, overriding `max_stack_size`, `rarity` and so on); `fuel` (an item's, or a
+block's for its item) is how long it burns in a furnace, in ticks, 0 for not at all, where the
+template's would be wrong (a plain item copied from a stick burns as a stick otherwise).
 
 How the game loads them, without touching vanilla's path:
 

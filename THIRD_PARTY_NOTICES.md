@@ -12,12 +12,19 @@ Apache-2.0; both licenses are in that folder (`LICENSE.MIT`, `LICENSE.APACHE`).
 `crates/horizon-client/src/game/kinetic_machines.rs` ports
 [Create](https://github.com/Creators-of-Create/Create) 6.0.10's mechanical drill and crushing
 wheels (BlockBreakingKineticBlockEntity, DrillBlockEntity, CrushingWheelBlock and
-CrushingWheelControllerBlockEntity), and `processing.rs`, `basins.rs`, `fans.rs` and `belts.rs`
-beside it its depot, millstone, mechanical press, basin, mechanical mixer, blaze burner, encased
-fan and mechanical belt (DepotBehaviour, MillstoneBlockEntity, PressingBehaviour, BasinRecipe,
-MechanicalMixerBlockEntity, BlazeBurnerBlockEntity, AirCurrent, FanProcessing, BeltInventory,
-BeltConnectorItem and their renderers), with `horizon_client::kinetics`'s water wheel
-(WaterWheelBlockEntity), by The Create Team, whose code is under the MIT license
+CrushingWheelControllerBlockEntity) and the recipes Create makes as the game loads
+(RuntimeDataGenerator), and `processing.rs`, `basins.rs`, `fans.rs`, `belts.rs`, `saws.rs`,
+`funnels.rs`, `chutes.rs`, `bearings.rs` and `arms.rs` beside it its depot, millstone,
+mechanical press, basin, mechanical mixer, blaze burner, encased fan, mechanical belt,
+mechanical saw, funnels, chute, bearings and mechanical arm (DepotBehaviour,
+MillstoneBlockEntity, PressingBehaviour, BasinRecipe, MechanicalMixerBlockEntity,
+BlazeBurnerBlockEntity, AirCurrent, FanProcessing, BeltInventory, BeltConnectorItem,
+SawBlockEntity, TreeCutter, FunnelBlock, FunnelBlockEntity, BeltFunnelBlock,
+BeltFunnelInteractionHandler, ChuteBlockEntity, MechanicalBearingBlockEntity,
+WindmillBearingBlockEntity, BearingContraption, BlockMovementChecks, ArmBlockEntity,
+ArmInteractionPoint, ArmAngleTarget and their renderers), with `horizon_client::kinetics`'s water wheel
+(WaterWheelBlockEntity) and stress (KineticNetwork) and `own_states.rs`'s placement
+(DirectionalAxisKineticBlock), by The Create Team, whose code is under the MIT license
 (`licenses/create-MIT.txt`). Create's assets are All Rights Reserved; none are in this
 repository: a shared port fetches them from Modrinth on the player's device.
 
