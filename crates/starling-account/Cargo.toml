@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Starling's Microsoft sign-in for the game itself (no launcher): the device-code flow, Xbox Live, XSTS, the Minecraft services, the ownership check, the official game files an owner may fetch, and the Java runtime that prepares them on a phone"
+description = "Starling's Microsoft sign-in for the game itself (no launcher): the device-code flow, Xbox Live, XSTS, the Minecraft services, the ownership check, the official game files fetched without an account, and the Java runtime that prepares them on a phone"
 publish = false
 
 [dependencies]

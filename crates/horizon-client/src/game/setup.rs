@@ -1,14 +1,15 @@
 //! Android: setting the game up on the phone when its resources are not there (or did not
-//! load), in place of the loading failure. Sign in with the Microsoft account that owns the game
-//! (accounts.rs), the official files fetched, then prepared on the phone (preparer.rs); or the
-//! resources prepared on a computer, picked as before. Drawn with the embedded Horizon font: the
-//! game's own is part of what is missing. While it waits, water to fish in (fishing.rs), and the
-//! game's settings, drawn in the low-budget skin the app carries (packaging/lowbudget).
+//! load), in place of the loading failure. The official files fetched from Mojang with one tap
+//! (accounts.rs), then prepared on the phone (preparer.rs); or the resources prepared on a
+//! computer, picked as before. No Microsoft account is needed to play. Drawn with the embedded
+//! Horizon font: the game's own is part of what is missing. While it waits, water to fish in
+//! (fishing.rs), and the game's settings, drawn in the low-budget skin the app carries
+//! (packaging/lowbudget).
 mod fishing;
 
 use super::{Audio, Loading, UiResources};
 use horizon_client::{
-    accounts::{self, Files, State},
+    accounts::{self, Files},
     hud::HudBatch,
     preparer::{self, Stage},
     ui_theme::{Face, Ui, color},
@@ -24,15 +25,8 @@ enum Step {
     /// game's files are where a player can reach them, and a bug report's log with them.
     #[cfg(target_os = "android")]
     Folder(super::files_offer::Stage),
-    /// Nothing under way: sign in, or bring resources from a computer.
+    /// Nothing under way: download the files, or bring resources from a computer.
     Start,
-    /// Asking Microsoft (or renewing the saved sign-in).
-    Talking,
-    /// The player signs in elsewhere with `code`.
-    Code {
-        code: String,
-        link: String,
-    },
     /// The official files on their way: files and bytes so far, and in all.
     Download([u64; 4]),
     /// Java on its way: bytes so far, and in all.
@@ -55,9 +49,8 @@ enum Action {
     /// Not now (asked again on the title screen only if not turned down), or Later.
     #[cfg(target_os = "android")]
     FolderLater,
-    SignIn,
-    OpenLink,
-    CopyCode,
+    /// Fetch the game's official files from Mojang.
+    Download,
     /// Pick the resources prepared on a computer (as the loading failure did).
     Pick,
     /// After a failure: the step that failed, again.
@@ -136,18 +129,11 @@ fn step(setup: &Setup, failure: &str) -> Step {
         Files::Ready => return Step::Java(0, 0),
         Files::Missing => {}
     }
-    match accounts::state() {
-        State::Offline => {
-            #[cfg(target_os = "android")]
-            if let Some(stage) = folder_offer(setup) {
-                return Step::Folder(stage);
-            }
-            Step::Start
-        }
-        State::Resuming | State::Starting | State::SignedIn(_) => Step::Talking,
-        State::Code { code, link } => Step::Code { code, link },
-        State::Failed(e) => Step::Failed(e),
+    #[cfg(target_os = "android")]
+    if let Some(stage) = folder_offer(setup) {
+        return Step::Folder(stage);
     }
+    Step::Start
 }
 
 /// The Starling folder's offer where it stands, while the game folder is still the app's own
@@ -182,17 +168,13 @@ fn texts(step: &Step) -> (&'static str, String, Option<String>) {
         }
         Step::Start => (
             "Set up Starling",
-            "Starling plays Minecraft: Java Edition from your own copy of the game. Sign in \
-             with the Microsoft account that owns it: Starling downloads the game from Mojang and \
-             prepares it on this phone, once (about 1.5 GB, a few minutes)."
+            "Starling plays Minecraft: Java Edition from the game's official files. Download \
+             them from Mojang (about 1.5 GB, a few minutes): Starling prepares them on this \
+             phone, once. No Microsoft account is needed to play; sign in from the title screen \
+             only for online-mode servers. Your offline name can be changed in Options > Skin \
+             Customization."
                 .into(),
             None,
-        ),
-        Step::Talking => ("Set up Starling", "Talking to Microsoft...".into(), None),
-        Step::Code { link, .. } => (
-            "Sign in with Microsoft",
-            format!("On {link}, enter this code:"),
-            Some("Starling goes on by itself once you have signed in.".into()),
         ),
         Step::Download([files, files_total, bytes, bytes_total]) => (
             "Downloading the game",
@@ -248,12 +230,8 @@ fn buttons(step: &Step) -> [Option<(&'static str, Action)>; 2] {
             ]
         }
         Step::Start => [
-            Some(("Sign in with Microsoft", Action::SignIn)),
+            Some(("Download game files", Action::Download)),
             Some(("Files from a computer", Action::Pick)),
-        ],
-        Step::Code { .. } => [
-            Some(("Open the page", Action::OpenLink)),
-            Some(("Copy the code", Action::CopyCode)),
         ],
         Step::Failed(_) => [
             Some(("Try again", Action::Retry)),
@@ -346,12 +324,11 @@ impl Loading {
         if preparer::running() {
             return;
         }
-        match (accounts::files(), accounts::state()) {
-            (Files::Ready, _) if preparer::stage() == Stage::Idle && !self.setup.prepared => {
-                preparer::start(self.vanilla_root.clone());
-            }
-            (Files::Missing, State::SignedIn(_)) => accounts::download_files(),
-            _ => {}
+        if matches!(accounts::files(), Files::Ready)
+            && preparer::stage() == Stage::Idle
+            && !self.setup.prepared
+        {
+            preparer::start(self.vanilla_root.clone());
         }
     }
 
@@ -377,10 +354,6 @@ impl Loading {
             lines.push("...".into());
         }
         let note = note.map(|n| wrap(&ui, 12.0, &n, inner));
-        let code = match &step {
-            Step::Code { code, .. } => Some(code.clone()),
-            _ => None,
-        };
         let bar = fraction(&step);
         // Out fishing, the card only says how far it is; Back is in the corner.
         let actions = if pond.is_some() {
@@ -390,9 +363,6 @@ impl Loading {
         };
         let button_h = 40.0;
         let mut card_h = pad + 26.0 + 12.0 + lines.len() as f32 * 21.0;
-        if code.is_some() {
-            card_h += 52.0;
-        }
         if bar.is_some() {
             card_h += 22.0;
         }
@@ -421,17 +391,6 @@ impl Loading {
         for line in &lines {
             ui.text(Face::Regular, 14.0, x + pad, ty, color::MUTED, line);
             ty += 21.0;
-        }
-        if let Some(code) = &code {
-            ui.text_centered(
-                Face::Semibold,
-                30.0,
-                x + card_w / 2.0,
-                ty + 8.0,
-                color::TEXT,
-                code,
-            );
-            ty += 52.0;
         }
         if let Some(done) = bar {
             ty += 6.0;
@@ -582,19 +541,7 @@ impl Loading {
                 }
                 self.setup.folder_later = true;
             }
-            Action::SignIn => accounts::sign_in(),
-            Action::OpenLink => {
-                if let State::Code { link, .. } = accounts::state()
-                    && !horizon_client::platform::open_link(&link).unwrap_or(false)
-                {
-                    log::warn!("Horizon: no browser opened {link}");
-                }
-            }
-            Action::CopyCode => {
-                if let State::Code { code, .. } = accounts::state() {
-                    let _ = horizon_client::platform::clipboard_set(&code);
-                }
-            }
+            Action::Download => accounts::download_files(),
             Action::Pick => {
                 if !horizon_client::platform::pick_file() {
                     log::warn!("Horizon: no file picker to import resources with");
@@ -611,8 +558,26 @@ impl Loading {
                     preparer::start(self.vanilla_root.clone())
                 }
                 (_, Files::Failed(_)) => accounts::download_files(),
-                _ => accounts::sign_in(),
+                _ => {}
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setting_up_downloads_without_an_account() {
+        let [download, other] = buttons(&Step::Start);
+        assert!(matches!(
+            download,
+            Some(("Download game files", Action::Download))
+        ));
+        assert!(matches!(
+            other,
+            Some(("Files from a computer", Action::Pick))
+        ));
     }
 }

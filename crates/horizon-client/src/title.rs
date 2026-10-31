@@ -109,7 +109,7 @@ pub enum Mode {
         return_to: Box<Mode>,
     },
     Multiplayer(crate::multiplayer::Screen),
-    /// Starling's Microsoft account (`accounts`): signing in, the game's files.
+    /// Starling's account (`accounts`): the optional Microsoft sign-in, and the game's files.
     Account,
     /// CreateFlatWorldScreen over Create New World: the fields that screen
     /// keeps and the superflat editor on top of them.

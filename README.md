@@ -26,13 +26,13 @@
 
 **[Starling v0.1.3](https://github.com/JuanLuci/starling/releases/latest)**: download `starling-0.1.3-arm64-v8a.apk` from [the releases page](https://github.com/JuanLuci/starling/releases) and open it on the phone (Android asks you to allow installing apps from your browser or file manager). Already on v0.1.0.1 or later? Starling offers it on its title screen, downloads it and has Android install it (Update, Tomorrow or No); from v0.1.0, install it over by hand once.
 
-**You need** a 64-bit phone with Android 8 or newer and Vulkan, about 2 GB free, and a Microsoft account that owns Minecraft: Java Edition. No computer: on the first start Starling signs you in, downloads the game's files from Mojang's servers and prepares them on the phone, once (79 seconds on a POCO F6 Pro, longer on slower phones). Go fishing or change the settings while it works.
+**You need** a 64-bit phone with Android 8 or newer, Vulkan and about 2 GB free. No computer and no Microsoft account: on the first start Starling downloads the game's files from Mojang's servers and prepares them on the phone, once (79 seconds on a POCO F6 Pro, longer on slower phones). Go fishing or change the settings while it works. A Microsoft account is only needed for online-mode servers.
 
 Builds of every push to the `android` branch are in [GitHub Actions](https://github.com/JuanLuci/starling/actions/workflows/android.yml) (the `starling-apk` artifact of a run; GitHub asks you to sign in to download it). They are signed with another key than the releases: uninstall one before installing the other, after copying your worlds out if they are not in the `Starling` folder. You can also [build it from source](#build-from-source).
 
 ## What works today
 
-- **Setting up on the phone:** sign in with your Microsoft account, and the game's files come from Mojang and are prepared on the phone, by a Java runtime fetched just for that and removed after, with every language the game has. While it works, fish in a little pond, or change the settings in a hand-drawn skin made for this screen (the game's own look is part of what is being prepared). Resources prepared on a computer still open too.
+- **Setting up on the phone:** tap Download and the game's files come from Mojang and are prepared on the phone, by a Java runtime fetched just for that and removed after, with every language the game has. While it works, fish in a little pond, or change the settings in a hand-drawn skin made for this screen (the game's own look is part of what is being prepared). Resources prepared on a computer still open too.
 - **The game:** singleplayer with vanilla's world generation, mobs, villagers, raids, redstone, every command, the HUD and the recipe book, on saves in vanilla's format, saved as soon as the app leaves the screen. Worlds from 1.8 to 26.2 are upgraded as vanilla does. Starling follows Horizon closely: v0.1.1 has its main of 2026-10-28.
 - **Touch controls:** every action on screen, from the movement stick to the hotbar, chat, commands and F3, with a layout you can move, resize and fade in the game, before a world too, and Sneak as Hold or Toggle. Bedrock's control modes: a stick (floating or fixed) or a D-pad, and tap to interact (a tap hits the mob or uses the block under the finger, a press breaks the block, interacts with the mob or uses the item in the air) or aim crosshair. F3 held offers its combinations (chunk borders, hitboxes, tooltips...); Pick Block and the player list are buttons to turn on; the phone buzzes when a block breaks or a stack splits, and it can aim by turning (gyroscope, off by default). They wear Bedrock's own buttons, fetched on the phone from Mojang's samples repository after the preparing (Starling ships none of them, only their names and hashes), else Starling's own.
 - **Your name and your skin:** in Options > Skin Customization, the name your worlds use and a skin from your files (or `Starling/skins`), classic or slim; a skin PNG opened with Starling is put on at once.
@@ -66,8 +66,8 @@ What the Android port covers so far; what is being done now and next is in the [
 | APK builds and updates | <img src="docs/media/progress/90.svg" alt="90%"> | Signed releases on the releases page, offered and installed by the game itself from v0.1.0.1 (the first offered: v0.1.1); every push also builds an APK in GitHub Actions |
 | Open to LAN and invites | <img src="docs/media/progress/10.svg" alt="10%"> | Not tried on Android yet |
 | Physical controllers | <img src="docs/media/progress/0.svg" alt="0%"> | No Android backend yet |
-| Setting up on the phone | <img src="docs/media/progress/80.svg" alt="80%"> | Prepared on a phone in 79 s from the official 26.3 files, with Java fetched for it; fishing and hand-drawn settings while it works; the download with an account that owns the game is not tried yet |
-| Microsoft account sign-in | <img src="docs/media/progress/70.svg" alt="70%"> | On the first start and in the game (the title screen's corner); the code and the ownership check work on a phone |
+| Setting up on the phone | <img src="docs/media/progress/80.svg" alt="80%"> | Prepared on a phone in 79 s from the official 26.3 files, with Java fetched for it; fishing and hand-drawn settings while it works; the one-tap download without an account is not tried yet |
+| Microsoft account sign-in | <img src="docs/media/progress/70.svg" alt="70%"> | In the game (the title screen's corner), for online-mode servers; the code and the ownership check work on a phone |
 
 ## Mods
 
@@ -90,7 +90,7 @@ python packaging/android/build_apk.py            # the APK lands in target/andro
 
 With [Node.js](https://nodejs.org) installed, the build also makes the JavaScript engine JavaScript mods run in; without it the APK runs the other mods only. The setup's hand-drawn skin is made by `python packaging/lowbudget/make.py` (with Pillow) into `packaging/lowbudget/pack`, which the APK carries as it is.
 
-The APK contains no game files. On the phone, Starling downloads them from Mojang for the Microsoft account that owns the game and prepares them there. To prepare them on a computer instead, it builds its resources from **your own copy** of Minecraft: Java Edition 26.3, verified against the checksums in `research-lock.json`, the same way Horizon does:
+The APK contains no game files. On the phone, Starling downloads them from Mojang and prepares them there. To prepare them on a computer instead, it builds its resources from **your own copy** of Minecraft: Java Edition 26.3, verified against the checksums in `research-lock.json`, the same way Horizon does:
 
 1. **Client:** install Java Edition with the official launcher and play 26.3 once. Horizon reads `versions/26.3/`, `libraries/` and `assets/` from the launcher's game directory. If yours lives elsewhere, pass `--minecraft-dir` or set `HORIZON_MINECRAFT_DIR`.
 2. **Server jar:** the 26.3 server jar, from the `downloads.server.url` in your launcher's `versions/26.3/26.3.json`. Pass it with `--server-jar` or set `HORIZON_SERVER_JAR`.

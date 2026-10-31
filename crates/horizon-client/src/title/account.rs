@@ -1,5 +1,5 @@
 //! Starling's account screen (`Mode::Account`): signing in with a Microsoft account by its
-//! device code, signing out, and fetching the game's official files as an owner of the game
+//! device code, signing out, and fetching the game's official files from Mojang
 //! (`crate::accounts`). Starling's own screen, in vanilla's look: no vanilla screen does this.
 use super::{centered, wrapped};
 use crate::accounts::{self, Files, State};
@@ -29,7 +29,7 @@ pub(super) fn main_label() -> String {
     match accounts::state() {
         State::SignedIn(account) => format!("Account: {}", account.name),
         State::Resuming => "Account: signing in...".into(),
-        _ => "Microsoft Account".into(),
+        _ => "Account: offline".into(),
     }
 }
 
@@ -40,7 +40,7 @@ fn mib(bytes: u64) -> String {
 fn files_line(files: &Files) -> (String, u32) {
     match files {
         Files::Missing => ("Game files: not fetched".into(), gray()),
-        Files::Checking => ("Game files: checking the account...".into(), gray()),
+        Files::Checking => ("Game files: checking what to fetch...".into(), gray()),
         Files::Downloading(p) if p.bytes_total == 0 => {
             ("Game files: listing what to fetch...".into(), gray())
         }
@@ -63,7 +63,7 @@ fn files_line(files: &Files) -> (String, u32) {
 fn lines(state: &State) -> Vec<(String, u32)> {
     match state {
         State::Offline => vec![(
-            "Sign in with the Microsoft account that owns Minecraft: Java Edition to play on online-mode servers and to fetch the game's files from Mojang. The sign-in stays on this device.".into(),
+            "Offline play needs no account. Sign in with a Microsoft account only to play on online-mode servers; the sign-in stays on this device. Your offline name is in Options > Skin Customization.".into(),
             gray(),
         )],
         State::Resuming | State::Starting => vec![("Signing in...".into(), gray())],

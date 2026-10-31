@@ -73,8 +73,9 @@ def sdk_dir():
 
 
 def tool(directory, name):
-    """An SDK tool, with Windows' .exe or .bat suffix."""
-    for suffix in ("", ".exe", ".bat", ".cmd"):
+    """An SDK tool, with Windows' .exe or .bat suffix first: the NDK also ships extensionless
+    shell wrappers, which Windows cannot run."""
+    for suffix in ((".exe", ".bat", ".cmd", "") if sys.platform == "win32" else ("",)):
         path = directory / (name + suffix)
         if path.is_file():
             return path

@@ -8,7 +8,7 @@ the technical picture under it. The game itself is Horizon's: its own roadmap is
 
 **Being done now**
 
-- **The first start on a phone**: sign in, and the game's files are downloaded and prepared on the
+- **The first start on a phone**: tap Download, and the game's files are downloaded and prepared on the
   phone, with a pond to fish in and the settings in a hand-drawn skin while it works.
 - **Shader packs on a phone**: Complementary and MakeUp running smoothly on a phone, picked on the
   Shader Packs page, and Starling Visuals, Starling's own pack made for phones.
@@ -28,7 +28,8 @@ browser.
 
 ### The first start on a phone
 
-You install the APK, sign in with the Microsoft account that owns the game, and play: no computer.
+You install the APK, tap Download, and play offline: no computer and no account. Sign in for
+online-mode servers.
 
 > Done (v0.1.0): the setup in place of the loading failure, drawn in Horizon's own font; the sign-in
 > by code; the official files fetched from Mojang for an owner (starling-account); OpenJDK 25 for
@@ -42,8 +43,9 @@ You install the APK, sign in with the Microsoft account that owns the game, and 
 > it stands; buttons drawn without a ruler in four takes). In v0.1.0.1: every language the game has
 > (the downloaded files carry them; resources prepared on a computer before horizon-prepare learnt
 > them had English only); no file error under the card on a first start; the credits close with a
-> tap or the back key; Touch Controls opens the layout editor over the setup and the title too. Left: the download with an account that owns the game, tried end to end;
-> plainer words on the setup's errors; how long it takes on slower phones.
+> tap or the back key; Touch Controls opens the layout editor over the setup and the title too.
+> Left: the one-tap download without an account, tried end to end; plainer words on the setup's
+> errors; how long it takes on slower phones.
 
 ### The keyboard
 

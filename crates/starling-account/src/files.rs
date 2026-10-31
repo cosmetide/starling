@@ -1,9 +1,9 @@
-//! The game's official files, fetched from Mojang's servers for an account that owns the game
-//! (an [`Owner`](crate::Owner)), each checked against the hash its manifest gives, as the
-//! official launcher does. Starling pins the version JSON itself (`research-lock.json`), so the
-//! chain of hashes starts from Starling's own files. Nothing of the game ships with Starling:
-//! the files land on the player's device, in the official launcher's layout
-//! (`versions/<v>/<v>.jar`, `libraries/…`, `assets/indexes|objects`) that horizon-prepare reads.
+//! The game's official files, fetched from Mojang's servers without an account, each checked
+//! against the hash its manifest gives, as the official launcher does. Starling pins the version
+//! JSON itself (`research-lock.json`), so the chain of hashes starts from Starling's own files.
+//! Nothing of the game ships with Starling: the files land on the player's device, in the official
+//! launcher's layout (`versions/<v>/<v>.jar`, `libraries/…`, `assets/indexes|objects`) that
+//! horizon-prepare reads.
 use serde_json::Value;
 use sha1::{Digest, Sha1};
 use std::io::{Read, Write};
@@ -190,7 +190,6 @@ fn library_applies(library: &Value) -> bool {
 /// there already with the right hash is kept, so an interrupted download resumes. The version
 /// JSON must be one Starling pins; every other file is checked against the hash it lists.
 pub fn download(
-    _owner: &crate::Owner,
     sources: &Sources,
     pins: &Pins,
     root: &Path,
