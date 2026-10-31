@@ -724,6 +724,7 @@ fn steps(
     (run.log)("Copying the client's assets and data");
     let mut indexed = sounds::Assets::load(repo, minecraft, run.log);
     let (version, count) = extract_client_resources(&run.client, root, indexed.as_mut().ok())?;
+    sounds::sounds(repo, minecraft, run.log)?;
     sounds::optional_imports(indexed.as_mut().map_err(|e| e.as_str()), run.log);
 
     // One file each, exported again when the exporter or the jar it reads changed.

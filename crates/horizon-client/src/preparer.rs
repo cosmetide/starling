@@ -52,6 +52,63 @@ pub fn running() -> bool {
     )
 }
 
+/// Whether the prepared resources hold any sound file.
+pub fn sounds_present(resources: &Path) -> bool {
+    std::fs::read_dir(resources.join("assets/minecraft/sounds"))
+        .is_ok_and(|mut entries| entries.next().is_some())
+}
+
+/// Copies only the downloaded sound assets into already-prepared resources, without Java.
+pub fn repair_sounds(resources: PathBuf) {
+    {
+        let mut stage = shared();
+        if matches!(
+            *stage,
+            Stage::Java(..) | Stage::Unpacking | Stage::Preparing(_)
+        ) {
+            return;
+        }
+        *stage = Stage::Preparing("Copying sounds".into());
+    }
+    let spawned = std::thread::Builder::new()
+        .name("sound-repair".into())
+        .spawn(move || {
+            *shared() = match copy_sounds(&resources) {
+                Ok(()) => Stage::Done,
+                Err(e) => {
+                    log::warn!("Horizon: the sounds were not repaired: {e}");
+                    Stage::Failed(e)
+                }
+            };
+        });
+    if let Err(e) = spawned {
+        *shared() = Stage::Failed(e.to_string());
+    }
+}
+
+fn copy_sounds(resources: &Path) -> Result<(), String> {
+    let kit = home().join("kit");
+    unpack_kit(&kit)?;
+    let made = horizon_prepare::sounds(&kit, Some(&crate::accounts::files_root()), &|line| {
+        log::info!("Horizon: repairing sounds: {line}")
+    })?;
+    let source = made.join("assets/minecraft");
+    let target = resources.join("assets/minecraft");
+    std::fs::create_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+    for name in ["sounds", "sounds.json"] {
+        let target = target.join(name);
+        if target.is_dir() {
+            std::fs::remove_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+        } else if target.is_file() {
+            std::fs::remove_file(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+        }
+        let source = source.join(name);
+        std::fs::rename(&source, &target).map_err(|e| format!("{}: {e}", source.display()))?;
+    }
+    let _ = std::fs::remove_dir_all(kit.join(".local"));
+    Ok(())
+}
+
 /// The runtime, the kit and horizon-prepare's work files: the app's own folder.
 fn home() -> PathBuf {
     crate::logging::private_home().join("preparer")

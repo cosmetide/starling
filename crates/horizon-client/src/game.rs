@@ -15934,6 +15934,18 @@ impl Loading {
             event_loop.exit();
             return;
         }
+        #[cfg(target_os = "android")]
+        if self.failure.is_none()
+            && matches!(
+                horizon_client::accounts::files(),
+                horizon_client::accounts::Files::Ready
+            )
+            && !horizon_client::preparer::sounds_present(&self.vanilla_root)
+        {
+            self.failure =
+                Some("The game's sound files were not prepared; preparing them again.".into());
+            horizon_client::preparer::repair_sounds(self.vanilla_root.clone());
+        }
         if self.failure.is_some() {
             // Prepared resources handed in (Android's "Open with" or the picker): load again.
             if self.imports.poll(&self.vanilla_root)
